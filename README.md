@@ -5,6 +5,11 @@ This is a command-line music player fully in Haskell for in-depth music lovers,
 yet under development.
 
 
+Prerequisite
+
+Make sure you have Magick and Chafa installed on your computer 
+
+
 Roadmap
 
 [x] Full mouse input support
