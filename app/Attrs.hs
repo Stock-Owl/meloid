@@ -16,15 +16,17 @@ import Brick.Themes qualified as T
 import Data.Yaml qualified as YAML
 import Graphics.Vty hiding (ColorMode)
 
-data ColorMode = Light | Dark
+data ColorMode = Light | Dark | Auto
 
 instance YAML.ToJSON ColorMode where
   toJSON Light = YAML.String "light"
   toJSON Dark = YAML.String "dark"
+  toJSON Auto = YAML.String "auto"
 
 instance YAML.FromJSON ColorMode where
   parseJSON (YAML.String "light") = pure Light
   parseJSON (YAML.String "dark") = pure Dark
+  parseJSON (YAML.String "auto") = pure Auto
   parseJSON _ = fail "Invalid ColorMode"
 
 a :: String -> AttrName

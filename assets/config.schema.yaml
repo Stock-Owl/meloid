@@ -13,3 +13,4 @@ properties:
     enum:
       - light
       - dark
+      - auto
