@@ -14,6 +14,8 @@ themselves in the context of child widgets.
 module Widgets.Views (
   DebugViewport (..),
   lookupRenderedImage,
+  drawView,
+  drawDialogView,
 ) where
 
 import Brick
@@ -51,77 +53,87 @@ lookupRenderedImage st name size
       lookupAlbumThumbRenderedImage st i size
   | otherwise = Nothing
 
-instance Drawable St ViewName where
-  draw MainView st =
-    W.vBox
-      [ W.hBox
-          [ drawControlPanel st
-          , W.padLeft (W.Pad 2) . W.padRight (W.Pad 1) $ drawSongPanel st
-          , drawNamed st AlbumArtPlaying
-          ]
-      , W.padTop (W.Pad 1) . W.hBox $
-          [ W.hLimitPercent 40 $ drawNamed st AllAlbumList
-          , W.padLeft (W.Pad 1) $
-              W.vBox
-                [ drawAlbumSongList st
-                , drawCurrentQueueList st
-                ]
-          ]
-      , drawBottomBar st
+drawView :: ViewName -> St -> Widget (MName St)
+drawView MainView st =
+  W.vBox
+    [ W.hBox
+        [ drawControlPanel st
+        , W.padLeft (W.Pad 2) . W.padRight (W.Pad 1) $ drawSongPanel st
+        , drawNamed st AlbumArtPlaying
+        ]
+    , W.padTop (W.Pad 1) . W.hBox $
+        [ W.hLimitPercent 40 $ drawNamed st AllAlbumList
+        , W.padLeft (W.Pad 1) $
+            W.vBox
+              [ drawAlbumSongList st
+              , drawCurrentQueueList st
+              ]
+        ]
+    , drawBottomBar st
+    ]
+drawView DebugView st = drawNamed st DebugViewport
+drawView _ _ = W.emptyWidget
+
+drawDialogView :: ViewName -> St -> Widget (MName St)
+drawDialogView WelcomeDialog st =
+  drawWelcomeDialog st
+drawDialogView SimpleDialog st =
+  drawSimpleDialog st
+drawDialogView _ _ = W.emptyWidget
+
+drawWelcomeDialog :: St -> Widget (MName St)
+drawWelcomeDialog st =
+  W.withAttr (attrName "dialog") $
+    W.padAll 2 . W.vBox $
+      [ C.hCenter $ W.str "Welcome to Gaze Player"
+      , C.hCenter pageWidget
+      , W.padTop (W.Pad 2) $
+          W.hBox
+            [ skipButton
+            , W.padLeft W.Max $
+                W.hBox
+                  [ prevButton
+                  , W.padLeft (W.Pad 1) nextOrFinish
+                  ]
+            ]
       ]
-  draw DebugView st = drawNamed st DebugViewport
-  draw WelcomeDialog st =
-    C.center $
-      W.withAttr (attrName "dialog") $
-        W.padAll 2 . W.vBox $
-          [ C.hCenter $ W.str "Welcome to Gaze Player"
-          , C.hCenter pageWidget
-          , W.padTop (W.Pad 2) $
-              W.hBox
-                [ skipButton
-                , W.padLeft W.Max $
-                    W.hBox
-                      [ prevButton
-                      , W.padLeft (W.Pad 1) nextOrFinish
-                      ]
-                ]
-          ]
-   where
-    page = fromMaybe 1 (st ^? stDialog .? dsPage)
+ where
+  page = fromMaybe 1 (st ^? stDialog .? dsPage)
 
-    prevButton
-      | page > 1 = drawNamed st PrevButton
-      | otherwise = W.emptyWidget
+  prevButton
+    | page > 1 = drawNamed st PrevButton
+    | otherwise = W.emptyWidget
 
-    skipButton
-      | page < 3 = drawNamed st SkipButton
-      | otherwise = W.emptyWidget
+  skipButton
+    | page < 3 = drawNamed st SkipButton
+    | otherwise = W.emptyWidget
 
-    nextOrFinish
-      | page < 3 = drawNamed st NextButton
-      | otherwise = drawNamed st FinishButton
+  nextOrFinish
+    | page < 3 = drawNamed st NextButton
+    | otherwise = drawNamed st FinishButton
 
-    pageWidget
-      | page == 1 =
-          W.str $
-            unlines
-              [ "This is a simple video player made in Haskell."
-              , "It aims to be fast, simple, and easy to use."
-              ]
-      | page == 2 =
-          W.str $
-            unlines
-              [ "This is the next page."
-              ]
-      | otherwise = W.str "\nUnknown page"
-  draw SimpleDialog st =
-    C.center $
-      W.withAttr (attrName "dialog") $
-        W.padAll 2 . W.vBox $
-          [ C.hCenter $ W.str "Welcome to Gaze Player"
-          , C.hCenter $ W.strWrap (st ^. stDialog .? dsText)
-          , W.padTop (W.Pad 2) . W.padLeft W.Max $ drawNamed st OkButton
-          ]
+  pageWidget
+    | page == 1 =
+        W.str $
+          unlines
+            [ "This is a simple video player made in Haskell."
+            , "It aims to be fast, simple, and easy to use."
+            ]
+    | page == 2 =
+        W.str $
+          unlines
+            [ "This is the next page."
+            ]
+    | otherwise = W.str "\nUnknown page"
+
+drawSimpleDialog :: St -> Widget (MName St)
+drawSimpleDialog st =
+  W.withAttr (attrName "dialog") $
+    W.padAll 2 . W.vBox $
+      [ C.hCenter $ W.str "Welcome to Gaze Player"
+      , C.hCenter $ W.strWrap (st ^. stDialog .? dsText)
+      , W.padTop (W.Pad 2) . W.padLeft W.Max $ drawNamed st OkButton
+      ]
 
 instance Drawable St DebugViewport where
   draw _ st =

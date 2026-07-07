@@ -5,11 +5,13 @@ module Widgets (
   module Widgets.Lists,
   module Widgets.Controls,
   module Widgets.Views,
+  module Widgets.Layer,
 )
 where
 
 import Widgets.Common
 import Widgets.Controls
 import Widgets.Images
+import Widgets.Layer
 import Widgets.Lists
 import Widgets.Views

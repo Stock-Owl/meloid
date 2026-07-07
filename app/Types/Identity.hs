@@ -16,6 +16,7 @@ module Types.Identity (
   NameKey,
   ViewName (..),
   mName,
+  drawMName,
   drawNamed,
   castMName,
   nameAncestry,
@@ -57,6 +58,8 @@ class (Typeable a) => Drawable st a | a -> st where
   handlesMouseScrollUp _ = False
   handlesMouseScrollDown :: a -> Bool
   handlesMouseScrollDown _ = False
+  layerSurface :: a -> Maybe (MName st)
+  layerSurface _ = Nothing
   isClickable :: a -> Bool
   isClickable a =
     handlesMouseLeftDown a
@@ -142,12 +145,13 @@ eval name@(MName a) st =
   (if isClickable a then B.clickable name else id)
     ((if willReportExtent a then B.reportExtent name else id) (draw a st))
 
-renderName :: st -> MName st -> Widget (MName st)
-renderName st = (`eval` st)
+-- | Draw an already existential widget name.
+drawMName :: st -> MName st -> Widget (MName st)
+drawMName = flip eval
 
 -- | Turn a concrete widget value into a named Brick widget.
 drawNamed :: (Typeable a, Drawable st a) => st -> a -> Widget (MName st)
-drawNamed st = renderName st . mName
+drawNamed st = drawMName st . mName
 
 parentRef :: MName st -> Maybe (ParentRef st)
 parentRef (MName a) = parent a

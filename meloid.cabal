@@ -42,6 +42,7 @@ executable meloid
         Widgets
         Widgets.Common
         Widgets.Images
+        Widgets.Layer
         Widgets.Lists
         Widgets.Controls
         Widgets.Views

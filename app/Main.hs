@@ -23,23 +23,16 @@ import Data.Vector qualified as Vec
 import Graphics.Vty qualified as V
 import Graphics.Vty.CrossPlatform qualified as Vty
 import Handle
-import Lens.Micro ((^.))
 import Lens.Micro.Mtl
 import Sys qualified
 import Types
-import Widgets (MenuList (MenuList))
+import Widgets qualified as Names
 import Widgets.Edits
 
-{- | Draw the UI into three layers:
-1. The menu list
-2. The dialog view
-3. The current view
--}
+-- | Draw the active top-level layers from top to bottom.
 drawUI :: St -> [Widget (MName St)]
 drawUI st =
-  drawNamed st MenuList
-    : maybe [] (pure . drawNamed st) (st ^. stDialogView)
-      <> maybe [] (pure . drawNamed st) (st ^. stCurrentView)
+  map (drawMName st) (Names.activeLayerNames st)
 
 app :: BChan Event -> Image.ImageService -> B.AttrMap -> M.App St Event (MName St)
 app chan imageService attrMap =

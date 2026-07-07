@@ -9,12 +9,21 @@ module Compat.Term (
   deduceFormat,
   isOutOfBandFormat,
   formatArg,
+  -- Raw terminal helpers
+  emitBytes,
+  moveCursor,
+  saveCursor,
+  restoreCursor,
 )
 where
 
+import Brick
+import Data.ByteString qualified as BS
+import Data.ByteString.Char8 qualified as BS8
 import Data.List
 import Data.Maybe
 import Data.Ord (comparing)
+import Graphics.Vty.Output qualified as Output
 import System.Environment (lookupEnv)
 
 {- | A data type to represent different terminal types.
@@ -106,3 +115,17 @@ deduceTerminalType =
   -- environment variables
   selectMost [] = Nothing
   selectMost xs = listToMaybe $ maximumBy (comparing length) $ group xs
+
+emitBytes :: Output.Output -> BS.ByteString -> IO ()
+emitBytes output =
+  Output.outputByteBuffer output
+
+moveCursor :: Location -> BS.ByteString
+moveCursor (Location (x, y)) =
+  BS8.pack $ "\ESC[" <> show (y + 1) <> ";" <> show (x + 1) <> "H"
+
+saveCursor :: BS.ByteString
+saveCursor = BS8.pack "\ESC7"
+
+restoreCursor :: BS.ByteString
+restoreCursor = BS8.pack "\ESC8"

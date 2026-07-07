@@ -9,8 +9,8 @@ module Widgets.Lists (
   AlbumArtThumb (..),
   QueueSongList (..),
   QueueSongListEntry (..),
-  MenuList (..),
   MenuListEntry (..),
+  drawMenuLayer,
 ) where
 
 import Brick
@@ -36,8 +36,6 @@ data AlbumArtThumb = AlbumArtThumb Int
 data QueueSongList = QueueSongList
 
 data QueueSongListEntry = QueueSongEntry Int
-
-data MenuList = MenuList
 
 data MenuListEntry = MenuListEntry Int
 
@@ -136,19 +134,20 @@ instance Drawable St QueueSongListEntry where
     stPlaying . psPaused .= False
     sendRequest . MPDOperation . pure $ MPD.play (Just i)
 
-instance Drawable St MenuList where
-  draw _ st = case st ^. stMenu of
+drawMenuLayer :: St -> Widget (MName St)
+drawMenuLayer st = case st ^. stMenu of
+  Just _ -> loc menu
+  _ -> W.emptyWidget
+ where
+  loc = case st ^. stPressed of
+    Just n -> W.relativeTo n (curry Location 0 0)
+    _ -> id
+  menu = case st ^. stMenu of
     (fmap length -> Just len) ->
-      loc $
-        W.withDefAttr (attrName "secondary") $
-          W.vBox $
-            map (drawNamed st . MenuListEntry) [0 .. len - 1]
+      W.withDefAttr (attrName "secondary") $
+        W.vBox $
+          map (drawNamed st . MenuListEntry) [0 .. len - 1]
     _ -> W.emptyWidget
-   where
-    loc = case st ^. stPressed of
-      Just n -> W.relativeTo n (curry Location 0 0)
-      _ -> id
-  parent _ = Just (ParentView MainView)
 
 instance Drawable St MenuListEntry where
   draw (MenuListEntry i) st = case st ^. stMenu of
@@ -160,7 +159,7 @@ instance Drawable St MenuListEntry where
         (mName $ MenuListEntry i)
         (name <> "          ")
     _ -> W.emptyWidget
-  parent (MenuListEntry _) = Just (ParentName (mName MenuList))
+  parent _ = Just (ParentView MainView)
   variant (MenuListEntry i) = i
   isClickable _ = True
   handlesMouseLeftUp _ = True

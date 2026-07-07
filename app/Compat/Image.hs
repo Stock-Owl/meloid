@@ -16,12 +16,12 @@ where
 
 import Brick
 import Brick.BChan (BChan, writeBChan, writeBChanNonBlocking)
-import Brick.Main qualified as M
+import Compat.Term
 import Compat.Term qualified as Term
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 import Control.Concurrent.STM
-import Control.Exception (IOException, try)
+import Control.Exception (IOException)
 import Control.Monad (forM, forever, replicateM_, unless, void)
 import Control.Monad.State (liftIO)
 import Control.Monad.Trans.Except (runExceptT)
@@ -204,52 +204,32 @@ clearScene service = do
 refreshScene :: ImageService -> EventM (MName St) St ()
 refreshScene service = do
   format <- use (stEnv . envImageFormat)
-  desired <- buildDesiredScene
   if not (Term.isOutOfBandFormat format)
     then pure ()
-    else liftIO $ storeDesiredScene service format desired
+    else do
+      desired <- buildDesiredScene
+      liftIO $ storeDesiredScene service format desired
 
 buildDesiredScene :: EventM (MName St) St PaintedScene
 buildDesiredScene = do
   st <- get
-  playing <-
+  let occluderNames = Names.activeOccluderNames st
+  playingEntries <-
     case st ^. stCurrentAlbum of
       Nothing -> pure []
       Just _ ->
-        case Names.lookupRenderedImage st (mName Names.AlbumArtPlaying) albumArtPlayingSize of
-          Just art@(TerminalGraphic _ _) ->
-            pure [(mName Names.AlbumArtPlaying, art)]
-          Just InlineSymbols{} ->
-            pure []
-          Nothing ->
-            pure []
+        paintableImage st occluderNames (mName Names.AlbumArtPlaying) albumArtPlayingSize
 
   visibleThumbs <- visibleAlbumThumbs st
   thumbs <-
     fmap concat . forM visibleThumbs $ \(i, _) -> do
       let name = mName (Names.AlbumArtThumb i)
-      M.lookupExtent name >>= \case
-        Nothing ->
-          pure []
-        Just extent ->
-          case Names.lookupRenderedImage st name albumArtThumbSize of
-            Just art@(TerminalGraphic _ _) ->
-              pure [(name, (extent, art))]
-            Just InlineSymbols{} ->
-              pure []
-            Nothing ->
-              pure []
-
-  playingEntries <-
-    fmap concat . forM playing $ \(name, art) ->
-      M.lookupExtent name >>= \case
-        Nothing -> pure []
-        Just extent -> pure [(name, (extent, art))]
+      paintableImage st occluderNames name albumArtThumbSize
 
   pure $ Map.fromList (playingEntries <> thumbs)
  where
-  visibleAlbumThumbs st = do
-    let albums = st ^. stConfig . csAllAlbums
+  visibleAlbumThumbs currentSt = do
+    let albums = currentSt ^. stConfig . csAllAlbums
         totalAlbums = Vec.length albums
         rowHeight = max 1 (snd albumArtThumbSize)
     lookupViewport (mName Names.AllAlbumList) >>= \case
@@ -265,6 +245,20 @@ buildDesiredScene = do
               | i <- [start .. end - 1]
               , Just album <- [albums Vec.!? i]
               ]
+
+  paintableImage :: St -> [MName St] -> MName St -> ImageSize -> EventM (MName St) St [(MName St, (Extent (MName St), RenderedImage))]
+  paintableImage currentSt occluderNames name size =
+    Names.lookupStrictExtent name occluderNames >>= \case
+      Just (Names.StrictExtent extent []) ->
+        case Names.lookupRenderedImage currentSt name size of
+          Just art@(TerminalGraphic _ _) ->
+            pure [(name, (extent, art))]
+          Just InlineSymbols{} ->
+            pure []
+          Nothing ->
+            pure []
+      _ ->
+        pure []
 
 syncOutOfBandScene :: Output.Output -> Term.ImageFormat -> PaintedScene -> PaintedScene -> IO ()
 syncOutOfBandScene output format previous desired
@@ -300,7 +294,7 @@ clearPaintedScene :: Output.Output -> Term.ImageFormat -> PaintedScene -> IO ()
 clearPaintedScene output format painted =
   case format of
     Term.Symbols -> pure ()
-    Term.Kitty -> ignoreIOException $ emitBytes output (BS8.pack "\ESC_Ga=d\ESC\\")
+    Term.Kitty -> emitBytes output (BS8.pack "\ESC_Ga=d\ESC\\")
     _ -> mapM_ (clearExtent output . fst) (Map.elems painted)
 
 clearStale :: Output.Output -> Term.ImageFormat -> PaintedScene -> PaintedScene -> IO ()
@@ -328,40 +322,20 @@ renderPainted :: Output.Output -> (Extent (MName St), RenderedImage) -> IO ()
 renderPainted output (extent, art) =
   case art of
     TerminalGraphic _ payload ->
-      ignoreIOException $
-        emitBytes output $
-          BS.concat [saveCursor, moveCursor (extentUpperLeft extent), payload, restoreCursor]
+      emitBytes output $
+        BS.concat [saveCursor, moveCursor (extentUpperLeft extent), payload, restoreCursor]
     InlineSymbols{} ->
       pure ()
 
 clearExtent :: Output.Output -> Extent (MName St) -> IO ()
 clearExtent output extent =
-  ignoreIOException $
-    emitBytes output $
-      BS.concat $
-        [saveCursor]
-          <> fmap clearRow [0 .. h - 1]
-          <> [restoreCursor]
+  emitBytes output $
+    BS.concat $
+      [saveCursor]
+        <> fmap clearRow [0 .. h - 1]
+        <> [restoreCursor]
  where
   Location (x, y) = extentUpperLeft extent
   (w, h) = extentSize extent
   blankRow = BS8.pack (replicate w ' ')
   clearRow row = moveCursor (Location (x, y + row)) <> blankRow
-
-emitBytes :: Output.Output -> BS.ByteString -> IO ()
-emitBytes output =
-  Output.outputByteBuffer output
-
-moveCursor :: Location -> BS.ByteString
-moveCursor (Location (x, y)) =
-  BS8.pack $ "\ESC[" <> show (y + 1) <> ";" <> show (x + 1) <> "H"
-
-saveCursor :: BS.ByteString
-saveCursor = BS8.pack "\ESC7"
-
-restoreCursor :: BS.ByteString
-restoreCursor = BS8.pack "\ESC8"
-
-ignoreIOException :: IO () -> IO ()
-ignoreIOException action =
-  void (try action :: IO (Either IOException ()))
