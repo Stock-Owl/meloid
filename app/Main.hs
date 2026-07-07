@@ -100,6 +100,7 @@ defaultSt =
           , _csAllPlaylists = Vec.empty
           , _csAllDirs = Vec.empty
           , _csAllAlbums = Vec.empty
+          , _csConfigs = defaultConfigValue
           }
     , _stPlaying =
         PlayingSt

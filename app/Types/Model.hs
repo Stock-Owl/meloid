@@ -1,3 +1,6 @@
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveLift #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 {- | Shared state records for the application.
@@ -6,6 +9,7 @@ depend on a stable data layer without pulling in unrelated
 helpers.
 -}
 module Types.Model (
+  ConfigValue (..),
   DialogSt (..),
   Album (..),
   Playlist (..),
@@ -43,6 +47,10 @@ module Types.Model (
   csAllPlaylists,
   csAllDirs,
   csAllAlbums,
+  csConfigs,
+  -- ConfigValue lenses
+  cvShowWelcome,
+  cvColorMode,
   -- PlayingSt lenses
   psCurrentSong,
   psCurrentTime,
@@ -62,12 +70,43 @@ import Brick.BChan (BChan)
 import Brick.Types (EventM, Extent)
 import Brick.Widgets.Edit qualified as E
 import Compat.Term (ImageFormat, TermType)
+import Data.Aeson qualified as JSON
+import Data.Char (toLower)
+import Data.List (stripPrefix)
 import Data.Map qualified as Map
 import Data.Vector qualified as Vec
+import GHC.Generics (Generic)
+import Language.Haskell.TH.Syntax (Lift)
 import Lens.Micro.TH (makeLenses)
 import Network.MPD qualified as MPD
 import Types.Core
 import Types.Identity (MName, ViewName)
+
+-- | User-editable configuration loaded from the YAML file.
+data ConfigValue = ConfigValue
+  { _cvShowWelcome :: Bool
+  , _cvColorMode :: String
+  }
+  deriving (Eq, Show, Generic, Lift)
+
+makeLenses ''ConfigValue
+
+configValueJsonOptions :: JSON.Options
+configValueJsonOptions =
+  JSON.defaultOptions
+    { JSON.fieldLabelModifier =
+        lowerHead . maybe "" id . stripPrefix "_cv"
+    }
+ where
+  lowerHead [] = []
+  lowerHead (x : xs) = toLower x : xs
+
+instance JSON.FromJSON ConfigValue where
+  parseJSON = JSON.genericParseJSON configValueJsonOptions
+
+instance JSON.ToJSON ConfigValue where
+  toJSON = JSON.genericToJSON configValueJsonOptions
+  toEncoding = JSON.genericToEncoding configValueJsonOptions
 
 -- | State for a simple text dialog.
 data DialogSt = DialogSt
@@ -99,6 +138,8 @@ data ConfigSt = ConfigSt
   , _csAllPlaylists :: Vec.Vector Playlist
   , _csAllDirs :: Vec.Vector FilePath
   , _csAllAlbums :: Vec.Vector Album
+  , -- Config loaded from the YAML config file.
+    _csConfigs :: ConfigValue
   }
 
 makeLenses ''ConfigSt

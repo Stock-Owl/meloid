@@ -5,7 +5,6 @@
 fine-grained album display and cache management.
 -}
 module Image (
-  prepareAlbumArtCacheDir,
   ensureCachedAlbumArtBytes,
   renderAlbumArt,
 ) where
@@ -20,10 +19,7 @@ import Data.ByteString qualified as BS
 import Data.ByteString.UTF8 qualified as UTF8
 import Numeric (showHex)
 import System.Directory (
-  XdgDirectory (XdgCache),
-  createDirectoryIfMissing,
   doesFileExist,
-  getXdgDirectory,
   removeFile,
   renameFile,
  )
@@ -31,22 +27,6 @@ import System.Exit (ExitCode (..))
 import System.IO (hClose, hSetBinaryMode, openBinaryTempFile)
 import System.Process
 import Types
-
-{- | Prepare the album art cache directory.
-The directory is responsible for storing album art so that
-we can avoid extracting the same album art multiple times.
--}
-prepareAlbumArtCacheDir :: IO FilePath
-prepareAlbumArtCacheDir = do
-  let fallbackDir = "/tmp/gaze-player/album-art"
-  preferredDir <- getXdgDirectory XdgCache "gaze-player/album-art"
-  (tryEnsure preferredDir :: IO (Either IOException ())) >>= \case
-    Right () -> pure preferredDir
-    Left _ -> do
-      createDirectoryIfMissing True fallbackDir
-      pure fallbackDir
- where
-  tryEnsure = try . createDirectoryIfMissing True
 
 {- | Ensure that the album art bytes are cached.
 If not, write the album art bytes to the cache.

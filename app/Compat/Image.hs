@@ -16,6 +16,7 @@ where
 
 import Brick
 import Brick.BChan (BChan, writeBChan, writeBChanNonBlocking)
+import Compat.Locations
 import Compat.Term
 import Compat.Term qualified as Term
 import Control.Concurrent (forkIO)
@@ -61,7 +62,7 @@ data ImageService = ImageService
 -- | Start the image service with workers for rendering album art.
 startImageService :: BChan Event -> IO ImageService
 startImageService evChan = do
-  rawCacheDir <- ImageProcessor.prepareAlbumArtCacheDir
+  rawCacheDir <- prepareAlbumArtCacheDir
   requests <- newTQueueIO
   pendingRender <- newTVarIO Set.empty
   renderQueue <- newImageRenderQueue

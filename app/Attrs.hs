@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 {- | This module provides attributes used in the UI.
 Attributes are colors and styles that can be applied to a
 widget. It complies with the Brick's theme system.
@@ -5,12 +7,25 @@ In the future, the application may support loading custom
 themes from files, which is provided by Brick.
 -}
 module Attrs (
+  ColorMode (..),
   defaultTheme,
 ) where
 
 import Brick
 import Brick.Themes qualified as T
-import Graphics.Vty
+import Data.Yaml qualified as YAML
+import Graphics.Vty hiding (ColorMode)
+
+data ColorMode = Light | Dark
+
+instance YAML.ToJSON ColorMode where
+  toJSON Light = YAML.String "light"
+  toJSON Dark = YAML.String "dark"
+
+instance YAML.FromJSON ColorMode where
+  parseJSON (YAML.String "light") = pure Light
+  parseJSON (YAML.String "dark") = pure Dark
+  parseJSON _ = fail "Invalid ColorMode"
 
 a :: String -> AttrName
 a = attrName
@@ -56,6 +71,4 @@ hex2RGB i =
   let r = (i `div` 65536) `mod` 256
       g = (i `div` 256) `mod` 256
       b = i `mod` 256
-  in srgbColor r g b
-
-
+   in srgbColor r g b

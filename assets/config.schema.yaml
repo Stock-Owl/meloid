@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://json-schema.org/draft/2020-12/schema
+$id: https://github.com/DexerMatters/meloid/raw/master/assets/config.schema.yaml
+$schema: https://json-schema.org/draft/2020-12/schema
+title: Config
+type: object
+properties:
+  showWelcome:
+    type: boolean
+    description: Whether to show the welcome message.
+
+  colorMode:
+    type: string
+    enum:
+      - light
+      - dark

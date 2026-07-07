@@ -10,6 +10,7 @@ the MPD server.
 module Sys (musicPlayerThread) where
 
 import Brick.BChan
+import Compat.Locations (configFile)
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Monad
 import Control.Monad.Except (ExceptT (ExceptT))
@@ -22,6 +23,7 @@ import Data.List
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Vector qualified as Vec
+import Data.Yaml qualified as YAML
 import Lens.Micro ((<&>))
 import Network.MPD qualified as MPD
 import Network.MPD.Core qualified as Core
@@ -139,6 +141,14 @@ musicPlayerThread reqChan evChan = do
                   Nothing ->
                     defaultAlbum
           plSongs <- mapM (ExceptT . MPD.withMPD . MPD.listPlaylistInfo) plNames
+          configs <-
+            ExceptT $
+              configFile
+                >>= YAML.decodeFileEither <&> \case
+                  Left err ->
+                    Left . MPD.Unexpected $
+                      "Failed to parse config file:\n" <> YAML.prettyPrintParseException err
+                  Right x -> Right x
           let playlists = zipWith Playlist plNames plSongs
           liftIO $
             postEvent $
@@ -149,6 +159,7 @@ musicPlayerThread reqChan evChan = do
                   , _csAllPlaylists = Vec.fromList playlists
                   , _csAllDirs = Vec.fromList (fmap MPD.toString dirs)
                   , _csAllAlbums = Vec.fromList albums
+                  , _csConfigs = configs
                   }
         either (pure . Just . Left) (const $ pure Nothing) result
 

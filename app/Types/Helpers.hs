@@ -1,5 +1,3 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-
 {- | Pure derived helpers for albums, songs, and current playback.
 These functions are intentionally kept state-only so they remain
 cheap to reuse from multiple modules.

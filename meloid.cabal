@@ -19,6 +19,10 @@ extra-doc-files:
     CHANGELOG.md
     README.md
 
+extra-source-files:
+    assets/config.schema.yaml
+    assets/default-config.yaml
+
 common warnings
     ghc-options: -Wall
 
@@ -35,6 +39,7 @@ executable meloid
         Types.Identity
         Types.Core
         Types.Model
+        Types.Config
         Types.Helpers
         Types.Actions
         Types.Logging
@@ -50,6 +55,7 @@ executable meloid
         Compat.Image
         Compat.Term
         Compat.Ansi
+        Compat.Locations
 
     -- other-extensions:
     build-depends:    
@@ -59,6 +65,7 @@ executable meloid
         directory,
         process,
         transformers,
+        template-haskell,
 
         -- Terminal UI packages
         brick,
@@ -81,7 +88,9 @@ executable meloid
         bytestring,
         vector,
         vector-algorithms,
-        vty-crossplatform
+        vty-crossplatform,
+        aeson,
+        yaml
 
     hs-source-dirs:   app
     default-language: GHC2024
