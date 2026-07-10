@@ -36,6 +36,8 @@ executable meloid
   import:           warnings
   ghc-options:      -threaded
   main-is:          Main.hs
+  autogen-modules:
+    Paths_meloid
   other-modules:
     Attrs
     Sys
@@ -63,6 +65,8 @@ executable meloid
     Compat.Term
     Compat.Ansi
     Compat.Software
+
+    Paths_meloid
 
   -- other-extensions:
   build-depends:    
