@@ -15,12 +15,14 @@ module Types.Identity (
   Drawable (..),
   NameKey,
   ViewName (..),
+  ElementScaffoldName (..),
   mName,
   drawMName,
   drawNamed,
   castMName,
   nameAncestry,
   named,
+  elementVariant,
 ) where
 
 import Brick qualified as B
@@ -28,12 +30,12 @@ import Brick.Types (EventM, Location, Widget)
 import Data.Proxy (Proxy (Proxy))
 import Data.Typeable (Typeable, cast)
 import Type.Reflection (SomeTypeRep, someTypeRep)
+import Types.Schemas
 
 data MName st where
   MName :: (Typeable a, Drawable st a) => a -> MName st
 
 {- | A parent relationship for a named widget.
-
 Widget ancestry can point to either another widget or a view root.
 -}
 data ParentRef st
@@ -96,6 +98,17 @@ data ViewName
   | WelcomeDialog
   | SimpleDialog
   deriving (Show, Eq, Ord)
+
+{- | The representation of layout elements in the edit mode.
+They appear as scaffolds in the edit mode which supports
+moving, resizing, deleting, and adding new elements.
+-}
+data ElementScaffoldName = ElementScaffoldName LayoutElement
+  deriving (Show, Eq)
+
+elementVariant :: LayoutElement -> Int
+elementVariant =
+  foldl' (\hash char -> hash * 33 + fromEnum char) 5381 . show
 
 {- | Build the comparison key for a widget name.
 The parent chain is part of the key so repeated entries remain

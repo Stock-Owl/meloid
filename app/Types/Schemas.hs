@@ -13,6 +13,7 @@ module Types.Schemas (
   ConfigValue (..),
   LayoutElement (..),
   defaultLayout,
+  formatElementName,
   EQConfigValue (..),
   EQBand (..),
   EQFilterType (..),
