@@ -47,6 +47,10 @@ executable meloid
     Types.Image
     Types.Model
     Types.Schemas
+    Types.Schemas.Config
+    Types.Schemas.EQConfig
+    Types.Schemas.Element
+    Types.Schemas.MPDConfig
     Types.Helpers
     Types.Actions
     Types.Logging
@@ -79,6 +83,7 @@ executable meloid
     mtl,
     containers,
     directory,
+    filepath,
     process,
     transformers,
     template-haskell,

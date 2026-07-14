@@ -23,9 +23,14 @@ module Utils (
   validExtent,
   containsExtent,
   intersectsExtent,
+  replace,
+  trim,
+  unquote,
 ) where
 
 import Brick (Extent (..), Location (..))
+import Data.Char (isSpace)
+import Data.List
 import Numeric (showFFloat)
 import Text.Printf (printf)
 
@@ -144,8 +149,9 @@ extentHorizontalBounds extent = (left extent, right extent)
 extentVerticalBounds :: Extent n -> (Int, Int)
 extentVerticalBounds extent = (top extent, bottom extent)
 
--- | Convert a divider coordinate into a pair-weight ratio while retaining
--- one renderable terminal cell for each adjacent child.
+{- | Convert a divider coordinate into a pair-weight ratio while retaining
+one renderable terminal cell for each adjacent child.
+-}
 resizeRatio :: Int -> (Int, Int) -> Int -> Double
 resizeRatio activeCells (start, end) coordinate
   | activeCells <= 1 || spanLength <= 0 = 0.5
@@ -156,8 +162,9 @@ resizeRatio activeCells (start, end) coordinate
   minimumShare = 1 / fromIntegral activeCells
   maximumShare = 1 - minimumShare
 
--- | Split a fixed number of cells among positive weights. Every cell is
--- assigned exactly once, and every child gets one cell when capacity permits.
+{- | Split a fixed number of cells among positive weights. Every cell is
+assigned exactly once, and every child gets one cell when capacity permits.
+-}
 weightedSizes :: Int -> [Double] -> [Int]
 weightedSizes total weights
   | capacity >= length weights = fmap (+ 1) $ distribute (capacity - length weights) weights
@@ -206,3 +213,21 @@ right extent = left extent + fst (extentSize extent)
 
 bottom :: Extent n -> Int
 bottom extent = top extent + snd (extentSize extent)
+
+-- | Replace all occurrences of a substring in a list. Safe against empty search terms.
+replace :: (Eq a) => [a] -> [a] -> [a] -> [a]
+replace [] _ xs = xs
+replace old new xs = go xs
+ where
+  go [] = []
+  go ys@(z : zs)
+    | old `isPrefixOf` ys = new ++ go (drop (length old) ys)
+    | otherwise = z : go zs
+
+trim :: String -> String
+trim = dropWhileEnd isSpace . dropWhile isSpace
+
+unquote :: String -> String
+unquote ('"' : value)
+  | not (null value) && last value == '"' = init value
+unquote value = value

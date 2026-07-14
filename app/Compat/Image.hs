@@ -42,8 +42,9 @@ import Graphics.Vty.Output qualified as Output
 import Lens.Micro ((^.))
 import Lens.Micro.Mtl
 import Numeric (showHex)
-import System.Directory (doesFileExist, removeFile, renameFile)
+import System.Directory (doesFileExist, getTemporaryDirectory, removeFile, renameFile)
 import System.Exit (ExitCode (..))
+import System.FilePath ((</>))
 import System.IO (hClose, hSetBinaryMode, openBinaryTempFile)
 import System.Process
 import Types
@@ -419,7 +420,7 @@ writeCachedBytes cacheDir path bytes = do
 
 sourceCachePath :: FilePath -> ImageSource -> FilePath
 sourceCachePath cacheDir source =
-  cacheDir <> "/" <> sourceCacheName source <> ".bin"
+  cacheDir </> (sourceCacheName source <> ".bin")
 
 ensureCachedRenderedImage :: FilePath -> ImageCacheKey -> ImageSource -> ExceptT IOException IO RenderedImage
 ensureCachedRenderedImage cacheDir key source =
@@ -456,15 +457,15 @@ writeCachedRenderedImage cacheDir key =
 renderCachePath :: FilePath -> ImageCacheKey -> FilePath
 renderCachePath cacheDir key =
   cacheDir
-    <> "/"
-    <> sourceCacheName (imageSource key)
-    <> "-"
-    <> Term.formatArg (imageFormat key)
-    <> "-"
-    <> show width
-    <> "x"
-    <> show height
-    <> ".render"
+    </> ( sourceCacheName (imageSource key)
+           <> "-"
+           <> Term.formatArg (imageFormat key)
+           <> "-"
+           <> show width
+           <> "x"
+           <> show height
+           <> ".render"
+       )
  where
   (width, height) = imageSize key
 
@@ -523,7 +524,8 @@ chafaOutput format (w, h) bytes = do
 
 writeTempImage :: BS.ByteString -> ExceptT IOException IO FilePath
 writeTempImage bytes = do
-  (tmpPath, handle) <- ExceptT . try $ openBinaryTempFile "/tmp" "meloid-image-input"
+  temporaryDir <- liftIO getTemporaryDirectory
+  (tmpPath, handle) <- ExceptT . try $ openBinaryTempFile temporaryDir "meloid-image-input"
   liftIO $ hSetBinaryMode handle True
   ExceptT (try $ BS.hPut handle bytes >> hClose handle) `catchE` \err -> do
     cleanupTempImage tmpPath
@@ -532,7 +534,8 @@ writeTempImage bytes = do
 
 convertToPng :: FilePath -> ExceptT IOException IO FilePath
 convertToPng inputPath = do
-  (tmpPath, handle) <- ExceptT . try $ openBinaryTempFile "/tmp" "meloid-image-converted.png"
+  temporaryDir <- liftIO getTemporaryDirectory
+  (tmpPath, handle) <- ExceptT . try $ openBinaryTempFile temporaryDir "meloid-image-converted.png"
   liftIO $ hClose handle
   readRawProcess "magick" [inputPath, tmpPath] (handleMagickResult tmpPath) `catchE` \err -> do
     cleanupTempImage tmpPath

@@ -97,7 +97,7 @@ handleGlobalEvent imageService = \case
   VtyEvent V.EvMouseDown{} -> dismissOpenMenu
   -- Ctrl + C to quit
   VtyEvent (V.EvKey (V.KChar 'c') [V.MCtrl]) ->
-    sendRequest SignalQuit $> True
+    handleQuitShortcut $> True
   -- Trigger when resize
   VtyEvent (V.EvResize _ _) -> do
     queueMainViewRefresh imageService $> True
@@ -113,6 +113,12 @@ handleGlobalEvent imageService = \case
   _ ->
     pure False
  where
+  handleQuitShortcut = do
+    isPanicked <- use stPanic
+    if isPanicked
+      then M.halt
+      else sendRequest SignalQuit
+
   submitCommandEdit =
     use (stEdits . esCommand . to (TZ.currentLine . E.editContents)) >>= execCmd
 

@@ -17,8 +17,6 @@ import Control.Monad
 import Control.Monad.Except (ExceptT (ExceptT))
 import Control.Monad.State (liftIO)
 import Control.Monad.Trans.Except (runExceptT)
-import Data.ByteString.UTF8 qualified as UTF8
-import Data.Char (isSpace)
 import Data.Function (on)
 import Data.List
 import Data.List.NonEmpty qualified as NonEmpty
@@ -27,11 +25,15 @@ import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Vector qualified as Vec
 import Lens.Micro
 import Network.MPD qualified as MPD
-import Network.MPD.Core qualified as Core
 import System.Directory (listDirectory)
+import System.FilePath ((</>))
 import Types hiding (panic)
 import Types.Configs qualified as Stored
 import Prelude hiding (log)
+
+withMPD :: String -> String -> MPD.MPD a -> IO (MPD.Response a)
+withMPD "*" port = MPD.withMPD_ Nothing (Just port)
+withMPD ip port = MPD.withMPD_ (Just ip) (Just port)
 
 songProgressInterval :: Int
 songProgressInterval = 200000
@@ -46,18 +48,19 @@ albumGroupKey song =
 {- | The loop that updates the song progress every
 `songProgressInterval`
 -}
-songProgressLoopThread :: BChan Event -> IO (MPD.Response ())
-songProgressLoopThread evChan = MPD.withMPD $ forever $ do
-  status <- MPD.status
-  liftIO $ do
-    writeBChan evChan $ UpdateTime (MPD.stTime status)
-    threadDelay songProgressInterval
+songProgressLoopThread :: String -> String -> BChan Event -> IO (MPD.Response ())
+songProgressLoopThread ip port evChan = withMPD ip port $
+  forever $ do
+    status <- MPD.status
+    liftIO $ do
+      writeBChan evChan $ UpdateTime (MPD.stTime status)
+      threadDelay songProgressInterval
 
 {- | The loop that updates the current song using `idle`
 command
 -}
-songChangeLoopThread :: BChan Event -> IO (MPD.Response ())
-songChangeLoopThread evChan = MPD.withMPD $ forever $ do
+songChangeLoopThread :: String -> String -> BChan Event -> IO (MPD.Response ())
+songChangeLoopThread ip port evChan = withMPD ip port $ forever $ do
   _ <- MPD.idle [MPD.PlayerS]
   status <- MPD.status
   curSong <- MPD.currentSong
@@ -71,7 +74,17 @@ songChangeLoopThread evChan = MPD.withMPD $ forever $ do
 -- | The main loop of the MPD backend
 musicPlayerThread :: BChan Request -> BChan Event -> IO ()
 musicPlayerThread reqChan evChan = do
-  res0 <- trace $ MPD.withMPD MPD.status
+  -- Get network status
+  (socket, ip, port) <- runExceptT getMPDSocket >>= either panic pure
+  log $
+    "Detected MPD running on socket: "
+      <> unlines
+        [ "\n Type: " <> show socket
+        , " IP: " <> ip
+        , " Port: " <> port
+        ]
+
+  res0 <- trace $ withMPD ip port MPD.status
   case res0 of
     Left _ ->
       panic $
@@ -91,13 +104,27 @@ musicPlayerThread reqChan evChan = do
     Right _ ->
       log "MPD is available."
 
-  _ <- MPD.withMPD $ MPD.rescan Nothing
+  _ <- withMPD ip port $ MPD.rescan Nothing
 
   -- Initialize stored configs
   configs <- runExceptT (Stored.read Stored.Configs) >>= either panic pure
   eqConfigs <- runExceptT loadEQConfigs >>= either panic pure
+  musicDir <-
+    runExceptT getMPDMusicDirectory >>= \case
+      Left err -> do
+        logEv evChan Warn "MPD" $
+          unlines
+            [ "Failed to read MPD music_directory from local config files."
+            , err
+            , "Song file inspection will stay unavailable until a music directory is resolved."
+            ]
+        pure Nothing
+      Right dir ->
+        pure dir
   log $ "Config is loaded successfully: " <> toString configs
   log $ "EQ configs are loaded successfully: " <> show eqConfigs
+  forM_ musicDir $ \dir ->
+    log $ "Detected MPD music directory: " <> dir
 
   -- Update modules
   -- Currently, Pipewire is the only supported audio server
@@ -120,22 +147,22 @@ musicPlayerThread reqChan evChan = do
         logEv evChan level "Setup" msg >> pure Nothing
       SignalInit ->
         forkIO
-          ( songChangeLoopThread evChan >>= \case
+          ( songChangeLoopThread ip port evChan >>= \case
               Right _ -> pure ()
               Left err -> panic $ "Error while starting song change loop: \n" <> show err
           )
           >> forkIO
-            ( songProgressLoopThread evChan >>= \case
+            ( songProgressLoopThread ip port evChan >>= \case
                 Right _ -> pure ()
                 Left err -> panic $ "Error while starting song progress loop: \n" <> show err
             )
           >> pure Nothing
       SignalQuit -> do
-        res <- Just <$> MPD.withMPD MPD.stop
+        res <- Just <$> withMPD ip port MPD.stop
         postEvent Halt
         pure res
       SignalCurrentQueue -> do
-        snapshot <- MPD.withMPD $ do
+        snapshot <- withMPD ip port $ do
           status <- MPD.status
           currentSong <- MPD.currentSong
           songs <- MPD.playlistInfo Nothing
@@ -146,7 +173,7 @@ musicPlayerThread reqChan evChan = do
             postEvent $ UpdateCurrentQueueState status currentSong songs
             pure Nothing
       MPDOperation op ->
-        Just . void <$> MPD.withMPD (sequence op)
+        Just . void <$> withMPD ip port (sequence op)
       UpdateEQId eqId -> do
         updateModuleEQId PipeWire eqId
         runExceptT
@@ -156,11 +183,9 @@ musicPlayerThread reqChan evChan = do
       -- This is matched when the app starts.
       -- It loads everything that is needed for the UI.
       GetConfig -> do
-        let socket = "/run/user/1000/mpd/socket"
         result <- runExceptT $ do
-          dir <- ExceptT $ MPD.withMPD_ (Just socket) Nothing getMusicDirectory
-          vol <- ExceptT $ MPD.withMPD $ MPD.status <&> MPD.stVolume
-          all' <- ExceptT $ MPD.withMPD $ MPD.listAllInfo ""
+          vol <- ExceptT $ withMPD ip port $ MPD.status <&> MPD.stVolume
+          all' <- ExceptT $ withMPD ip port $ MPD.listAllInfo ""
           let songs = [song | MPD.LsSong song <- all']
               plNames = [playlist | MPD.LsPlaylist playlist <- all']
               dirs = [dir' | MPD.LsDirectory dir' <- all']
@@ -177,14 +202,14 @@ musicPlayerThread reqChan evChan = do
                       }
                   Nothing ->
                     defaultAlbum
-          plSongs <- mapM (ExceptT . MPD.withMPD . MPD.listPlaylistInfo) plNames
+          plSongs <- mapM (ExceptT . withMPD ip port . MPD.listPlaylistInfo) plNames
           let playlists = zipWith Playlist plNames plSongs
           liftIO $
             postEvent $
               UpdateConfig $
                 ConfigSt
                   { _csVolume = fromMaybe 0 vol
-                  , _csMusicDir = fromMaybe "" dir
+                  , _csMusicDir = fromMaybe "" musicDir
                   , _csAllPlaylists = Vec.fromList playlists
                   , _csAllDirs = Vec.fromList (fmap MPD.toString dirs)
                   , _csAllAlbums = Vec.fromList albums
@@ -219,26 +244,9 @@ musicPlayerThread reqChan evChan = do
 
   postEvent = writeBChan evChan
 
-  getMusicDirectory = do
-    lines_ <- Core.getResponse "config"
-    pure $ lookupConfig "music_directory" (map UTF8.toString lines_)
-
-  lookupConfig key lines_ =
-    case find ((key ++ ":") `prefixOf`) lines_ of
-      Nothing -> Nothing
-      Just line ->
-        let value =
-              dropWhile isSpace $
-                drop 1 $
-                  dropWhile (/= ':') line
-         in Just value
-
-  prefixOf prefix s =
-    take (length prefix) s == prefix
-
   loadEQConfigs = do
     _ <- Stored.path (Stored.EQConfigs "default")
-    eqDir <- liftIO $ (<> "/eq") <$> Stored.configDir
+    eqDir <- liftIO $ (</> "eq") <$> Stored.configDir
     eqFiles <- liftIO $ listDirectory eqDir
     let eqIds =
           sort
